@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "pySigma-backend-chronicle"
+version = "0.1.0"
+description = "pySigma udm backend"
+authors = ["Thomas Patzke <thomas@patzke.org>"]
+license = "MIT"
+repository = "https://github.com/SigmaHQ/pySigma-backend-chronicle"
+packages = [
+    { include = "sigma" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pysigma = "^0.11.3"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1.1"
+pytest-cov = "^4.1.0"
+coverage = "^7.4.3"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
