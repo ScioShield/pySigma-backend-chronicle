@@ -1,11 +1,11 @@
 from sigma.pipelines.chronicle.chronicle import chronicle_pipeline
 import sigma.collection
-from sigma.backends.chronicle.chronicle_udm import chronicleBackendUdm
+from sigma.backends.chronicle.chronicle_yaral import chronicleBackendYaral
 import sigma.modifiers
 import glob 
 
 pipeline = chronicle_pipeline()
-backend = chronicleBackendUdm(pipeline)
+backend = chronicleBackendYaral(pipeline)
 #
 #process_start_rules = [r"proc_creation_win_7zip_exfil_dmp_files.yml",
 #                       r"sysmon_regsvr32_network_activity.yml"]
