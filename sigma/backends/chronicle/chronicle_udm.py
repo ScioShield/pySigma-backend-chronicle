@@ -1,11 +1,9 @@
 from sigma.conversion.state import ConversionState
 from sigma.rule import SigmaRule
 from sigma.conversion.base import TextQueryBackend
-from sigma.types import SigmaCompareExpression, SigmaRegularExpression, SigmaRegularExpressionFlag
-from sigma.conversion.deferred import DeferredQueryExpression, DeferredTextQueryExpression
-from sigma.types import re, SigmaString, SigmaNumber
-import sigma
-from sigma.exceptions import SigmaFeatureNotSupportedByBackendError
+from sigma.types import SigmaCompareExpression, SigmaRegularExpressionFlag
+from sigma.conversion.deferred import DeferredQueryExpression
+from sigma.types import re
 from sigma.pipelines.chronicle.chronicle import chronicle_pipeline
 import re
 from typing import ClassVar, Dict, Tuple, Pattern, List, Any, Optional
@@ -17,26 +15,15 @@ from sigma.conditions import (
     ConditionAND,
     ConditionNOT,
     ConditionFieldEqualsValueExpression,
-    ConditionValueExpression,
-    ConditionType,
 )
-from sigma.processing.postprocessing import ReplaceQueryTransformation
 
 class chronicleBackendUdm(TextQueryBackend):
     """chronicle UDM backend."""
-    # TODO: change the token definitions according to the syntax. Delete these not supported by your backend.
-    # See the pySigma documentation for further infromation:
-    # https://sigmahq-pysigma.readthedocs.io/en/latest/Backends.html
-
-    # Operator precedence: tuple of Condition{AND,OR,NOT} in order of precedence.
-    # The backend generates grouping if required
     name : ClassVar[str] = "chronicle UDM backend"
     formats : Dict[str, str] = {
         "default": "UDM Queries",
         
     }
-    # register the output formats
-
 
     requires_pipeline : bool = True
 
@@ -133,23 +120,14 @@ class chronicleBackendUdm(TextQueryBackend):
     # Null/None expressions
     field_null_expression : ClassVar[str] = '{field} = "None"'          # Expression for field has null value as format string with {field} placeholder for field name
 
-    # Field existence condition expressions.
-    #field_exists_expression : ClassVar[str] = "exists({field})"             # Expression for field existence as format string with {field} placeholder for field name
-    #field_not_exists_expression : ClassVar[str] = "notexists({field})"      # Expression for field non-existence as format string with {field} placeholder for field name. If not set, field_exists_expression is negated with boolean NOT.l
-
     # Field value in list, e.g. "field in (value list)" or "field containsall (value list)"
     convert_or_as_in : ClassVar[bool] = True                     # Convert OR as in-expression
     convert_and_as_in : ClassVar[bool] = True                    # Convert AND as in-expression
-    in_expressions_allow_wildcards : ClassVar[bool] = True       # Values in list can contain wildcards. If set to False (default) only plain values are converted into in-expressions.
-    field_in_list_expression : ClassVar[str] = "{field} {op} ({list})"  # Expression for field in list of values as format string with placeholders {field}, {op} and {list}
-    #or_in_operator : ClassVar[str] = "in"               # Operator used to convert OR into in-expressions. Must be set if convert_or_as_in is set
-    #and_in_operator : ClassVar[str] = "contains-all"    # Operator used to convert AND into in-expressions. Must be set if convert_and_as_in is set
     list_separator : ClassVar[str] = ", "               # List element separator
 
     # Value not bound to a field
     unbound_value_str_expression : ClassVar[str] = '"{value}"'   # Expression for string value not bound to a field as format string with placeholder {value}
     unbound_value_num_expression : ClassVar[str] = '{value}'     # Expression for number value not bound to a field as format string with placeholder {value}
-    #unbound_value_re_expression : ClassVar[str] = '_=~{value}'   # Expression for regular expression not bound to a field as format string with placeholder {value} and {flag_x} as described for re_expression
 
     # Query finalization: appending and concatenating deferred query part
     deferred_start : ClassVar[str] = "\n| "               # String used as separator between main query and deferred parts
@@ -196,7 +174,6 @@ class chronicleBackendUdm(TextQueryBackend):
     def convert_condition_as_in_expression(self, cond : Union[ConditionOR, ConditionAND], state : ConversionState) -> Union[str, DeferredQueryExpression]:
         """Conversion of field in value list conditions."""
         vals = [str(arg.value.to_plain() or "") for arg in cond.args]
-        #field = '$selection.'+cond.args[0].field
         field = cond.args[0].field
 
         # or-in condition
@@ -204,19 +181,15 @@ class chronicleBackendUdm(TextQueryBackend):
             # contains
             if all(val.startswith(self.wildcard_single) and val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(") for val in vals_no_wc]
                 result = ' OR '.join([self.contains_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # starts with
             elif all(val.endswith(self.wildcard_single) and not val.startswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(") for val in vals_no_wc]
                 result = ' OR '.join([self.startswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # ends with
             elif all(val.startswith(self.wildcard_single) and not val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(") for val in vals_no_wc]
                 result = ' OR '.join([self.endswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
-            # plain equals can't use list must be array
             else:
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
                 result = ' OR '.join([f'{field} = "{val.lstrip(self.wildcard_single).rstrip(self.wildcard_single)}"' for val in vals])
@@ -224,26 +197,22 @@ class chronicleBackendUdm(TextQueryBackend):
         elif isinstance(cond, ConditionAND):
             if all(val.startswith(self.wildcard_single) and val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/") for val in vals_no_wc]
                 result = ' AND '.join([self.contains_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # starts with
             elif all(val.endswith(self.wildcard_single) and not val.startswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/") for val in vals_no_wc]
                 result = ' AND '.join([self.startswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # ends with
             elif all(val.startswith(self.wildcard_single) and not val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/") for val in vals_no_wc]
                 result = ' AND '.join([self.endswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
-            # plain equals can't use list must be array
             else:
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
                 result = ' AND '.join([f'{field} = "{val.lstrip(self.wildcard_single).rstrip(self.wildcard_single)}"' for val in vals])
             
         else:
             # ... other conditions ...
-            print("pass")
+            print("An Error Occurred")
             pass
 
         return result
