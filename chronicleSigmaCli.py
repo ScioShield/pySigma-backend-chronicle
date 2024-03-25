@@ -9,8 +9,8 @@ backend = chronicleBackendYaral(pipeline)
 #
 #process_start_rules = [r"proc_creation_win_7zip_exfil_dmp_files.yml",
 #                       r"sysmon_regsvr32_network_activity.yml"]
-#process_start_rules = glob.glob("rules/*.yml")
-process_start_rules = [r"rules/proc_creation_win_susp_obfuscated_ip_download.yml"]
+process_start_rules = glob.glob("rules/*.yml")
+#process_start_rules = [r"rules/proc_creation_win_susp_obfuscated_ip_download.yml"]
 
 process_start_rule_collection = sigma.collection.SigmaCollection.load_ruleset(process_start_rules)
 

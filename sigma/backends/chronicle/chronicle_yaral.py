@@ -1,11 +1,9 @@
 from sigma.conversion.state import ConversionState
 from sigma.rule import SigmaRule
 from sigma.conversion.base import TextQueryBackend
-from sigma.types import SigmaCompareExpression, SigmaRegularExpression, SigmaRegularExpressionFlag
-from sigma.conversion.deferred import DeferredQueryExpression, DeferredTextQueryExpression
-from sigma.types import re, SigmaString, SigmaNumber
-import sigma
-from sigma.exceptions import SigmaFeatureNotSupportedByBackendError
+from sigma.types import SigmaCompareExpression, SigmaRegularExpressionFlag
+from sigma.conversion.deferred import DeferredQueryExpression
+from sigma.types import re
 from sigma.pipelines.chronicle.chronicle import chronicle_pipeline
 import re
 from typing import ClassVar, Dict, Tuple, Pattern, List, Any, Optional
@@ -17,23 +15,14 @@ from sigma.conditions import (
     ConditionAND,
     ConditionNOT,
     ConditionFieldEqualsValueExpression,
-    ConditionValueExpression,
-    ConditionType,
 )
 from sigma.processing.postprocessing import ReplaceQueryTransformation
 
 class chronicleBackendYaral(TextQueryBackend):
     """chronicle YARA-L backend."""
-    # TODO: change the token definitions according to the syntax. Delete these not supported by your backend.
-    # See the pySigma documentation for further infromation:
-    # https://sigmahq-pysigma.readthedocs.io/en/latest/Backends.html
-
-    # Operator precedence: tuple of Condition{AND,OR,NOT} in order of precedence.
-    # The backend generates grouping if required
     name : ClassVar[str] = "chronicle YARA-L backend"
     formats : Dict[str, str] = {
         "default": "YARAL Rules",
-        
     }
     # register the output formats
 
@@ -83,7 +72,6 @@ class chronicleBackendYaral(TextQueryBackend):
     startswith_expression : ClassVar[str] = "{field} = /^{value}.*/ nocase"
     endswith_expression   : ClassVar[str] = "{field} = /.*{value}$/ nocase"
     contains_expression   : ClassVar[str] = "{field} = /.*{value}.*/ nocase"
-    wildcard_match_expression : ClassVar[str] = "{field} match {value}"
 
     # String matching operators. if none is appropriate eq_token is used.
     # Regular expressions
@@ -140,8 +128,6 @@ class chronicleBackendYaral(TextQueryBackend):
     # Field value in list, e.g. "field in (value list)" or "field containsall (value list)"
     convert_or_as_in : ClassVar[bool] = True                     # Convert OR as in-expression
     convert_and_as_in : ClassVar[bool] = True                    # Convert AND as in-expression
-    in_expressions_allow_wildcards : ClassVar[bool] = True       # Values in list can contain wildcards. If set to False (default) only plain values are converted into in-expressions.
-    field_in_list_expression : ClassVar[str] = "{field} {op} ({list})"  # Expression for field in list of values as format string with placeholders {field}, {op} and {list}
     #or_in_operator : ClassVar[str] = "in"               # Operator used to convert OR into in-expressions. Must be set if convert_or_as_in is set
     #and_in_operator : ClassVar[str] = "contains-all"    # Operator used to convert AND into in-expressions. Must be set if convert_and_as_in is set
     list_separator : ClassVar[str] = ", "               # List element separator
@@ -155,9 +141,6 @@ class chronicleBackendYaral(TextQueryBackend):
     deferred_start : ClassVar[str] = "\n| "               # String used as separator between main query and deferred parts
     deferred_separator : ClassVar[str] = "\n| "           # String used to join multiple deferred query parts
     deferred_only_query : ClassVar[str] = "*"            # String used as query if final query only contains deferred expression
-
-    # TODO: implement custom methods for query elements not covered by the default backend base.
-    # Documentation: https://sigmahq-pysigma.readthedocs.io/en/latest/Backends.html
 
     def get_quote_type(self, string_val):
         """Returns the shortest correct quote type (single, double, or trip) based on quote characters contained within an input string"""
@@ -205,19 +188,15 @@ class chronicleBackendYaral(TextQueryBackend):
             # contains
             if all(val.startswith(self.wildcard_single) and val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(") for val in vals_no_wc]
                 result = ' OR '.join([self.contains_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # starts with
             elif all(val.endswith(self.wildcard_single) and not val.startswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(") for val in vals_no_wc]
                 result = ' OR '.join([self.startswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # ends with
             elif all(val.startswith(self.wildcard_single) and not val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(") for val in vals_no_wc]
                 result = ' OR '.join([self.endswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
-            # plain equals can't use list must be array
             else:
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
                 result = ' OR '.join([f'{field} = "{val.lstrip(self.wildcard_single).rstrip(self.wildcard_single)}"' for val in vals])
@@ -225,26 +204,22 @@ class chronicleBackendYaral(TextQueryBackend):
         elif isinstance(cond, ConditionAND):
             if all(val.startswith(self.wildcard_single) and val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/") for val in vals_no_wc]
                 result = ' AND '.join([self.contains_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # starts with
             elif all(val.endswith(self.wildcard_single) and not val.startswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/") for val in vals_no_wc]
                 result = ' AND '.join([self.startswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
             # ends with
             elif all(val.startswith(self.wildcard_single) and not val.endswith(self.wildcard_single) for val in vals):
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
-                #escaped_vals = [val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/") for val in vals_no_wc]
                 result = ' AND '.join([self.endswith_expression.format(field=field, value=val.replace("\\", "\\\\").replace("$", "\\$").replace(".", "\\.").replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")) for val in vals_no_wc])
-            # plain equals can't use list must be array
             else:
                 vals_no_wc = [val.rstrip(self.wildcard_multi).lstrip(self.wildcard_multi) for val in vals]
                 result = ' AND '.join([f'{field} = "{val.lstrip(self.wildcard_single).rstrip(self.wildcard_single)}"' for val in vals])
             
         else:
             # ... other conditions ...
-            print("pass")
+            print("An Error Occurred")
             pass
 
         return result
