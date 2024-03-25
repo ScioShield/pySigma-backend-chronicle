@@ -9,6 +9,7 @@ It supports the following output formats:
 
 Chronicle UDM  
 * default: plain UDM queries
+
 Chronicle YARA-L  
 * default: plain YARA-L rules
 
