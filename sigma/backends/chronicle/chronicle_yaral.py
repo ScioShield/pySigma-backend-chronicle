@@ -258,4 +258,4 @@ class chronicleBackendYaral(TextQueryBackend):
     
     def finalize_query_default(self, rule: SigmaRule, query: str, index: int, state: ConversionState) -> str:
         # we replace the field in quarry with an $selection.field
-        return f"""rule SIGMA_{(rule.title).replace(" ","_")}\n{{\n    meta:\n        author = "{rule.author}"\n        description = "{rule.description}"\n        id = "{rule.id}"\n        status = "{rule.level}"\n        false_positives = "{rule.falsepositives}"\n        references = "{rule.references}"\n    event:\n        ({query})"\n    condition:\n        $selection\n}}"""
+        return f"""rule SIGMA_{(rule.title).replace(" ","_")}\n{{\n    meta:\n        author = "{rule.author}"\n        description = "{rule.description}"\n        id = "{rule.id}"\n        status = "{rule.level}"\n        false_positives = "{rule.falsepositives}"\n        references = "{rule.references}"\n    events:\n        ({query})\n    condition:\n        $selection\n}}"""
